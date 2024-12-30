@@ -2,7 +2,7 @@
 
 ### APIs Implemented
 
-1. Get /recommend
+1. Get /recommend (Auth: None)
 
     Request: curl '/recommend?query=A%20vegetarian%20Italian%20restaurant&requestTime=2024-12-29%2019%3A54%3A37.273202-06%3A00'
     * query: Hold the sentence to pass (required)
@@ -39,7 +39,7 @@
         nextPage: 2
     }
     ```        
-2. POST /restaurant: Persist restaurants to the database in batches of 50 (Batch size is configurable)
+2. POST /restaurant (Auth: X-AUTH-API-KEY header): Persist restaurants to the database in batches of 50 (Batch size is configurable)
     
     Body:
     ```
@@ -75,7 +75,7 @@
         "body": {"message": "Successfully created X records"}
     }
     ```
-3. PUT /restaurant: Update the a restaurant. Name and Address cannot be updated.
+3. PUT /restaurant (Auth: X-AUTH-API-KEY header): Update the a restaurant. Name and Address cannot be updated.
     
     Body:
     ```
@@ -99,7 +99,7 @@
         "body": {"message": "Successfully updated test2 restaurant"}
     }
     ```
-4. POST /deleteRestaurant
+4. POST /deleteRestaurant (Auth: X-AUTH-API-KEY header)
 
     Body:
     ```

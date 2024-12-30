@@ -51,8 +51,8 @@ jobs:
       - name: Init Terraform
         run: |
           terraform init
-          terraform workspace new ${{ inputs.environment}} || exit 0
-          terraform workspace select ${{ inputs.environment}} || exit 0
+          terraform workspace new ${{ inputs.environment}} || true
+          terraform workspace select ${{ inputs.environment}} || true
         working-directory: ./terraform
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}

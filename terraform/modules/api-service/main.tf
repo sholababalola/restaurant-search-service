@@ -148,6 +148,11 @@ resource "aws_iam_policy" "lambda_secrets_access_policy" {
         Effect   = "Allow",
         Action   = ["kms:Decrypt"],
         Resource = [aws_kms_key.service.arn, var.db_credential_secret_key_arn]
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["kms:Encrypt", "kms:Generate*", ],
+        Resource = [aws_kms_key.service.arn, var.db_credential_secret_key_arn]
       }
     ]
   })
