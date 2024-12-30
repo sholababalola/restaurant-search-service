@@ -9,7 +9,7 @@ from sqlalchemy import (
     Enum as SqlalchemyEnum,
 )
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.dialects.postgresql import JSONB
+import base64
 
 from enum import Enum
 import re
@@ -37,10 +37,11 @@ class RequestType(Enum):
     Delete = 4
     NotImplemented = 5
 
+
 class Style(Enum):
     italian = 1
-    french  = 2 
-    korean  = 3
+    french = 2
+    korean = 3
 
 
 class Restaurant(Base):
@@ -64,14 +65,15 @@ class RequestHistory(Base):
     __tablename__ = "request_history"
 
     id = Column(BigInteger, primary_key=True)
-    request = Column(JSONB, nullable=False)
-    response = Column(JSONB, nullable=False)
+    request = Column(String, nullable=False)
+    response = Column(String, nullable=False)
     request_time = Column(TIMESTAMP(timezone=True), nullable=False)
     request_type = Column(SqlalchemyEnum(RequestType), nullable=False)
 
+
 def get_database_time(time_str, timezone):
     return f"2000-01-01 {to_24_hour_format(time_str)} {timezone}"
-    
+
 
 def to_24_hour_format(time_str):
     """
@@ -136,3 +138,21 @@ def extract_time_and_context(sentence: str, request_time: pendulum.DateTime):
         }
 
     return None
+
+
+def encrypt_data(kms_client, key_id, plaintext):
+    """
+    Encrypt plaintext data using AWS KMS.
+    :param key_id: The KMS Key ID or ARN.
+    :param plaintext: The data to encrypt (as a string).
+    :return: Encrypted data in Base64 encoding.
+    """
+    try:
+        response = kms_client.encrypt(KeyId=key_id, Plaintext=plaintext)
+        # The ciphertext is binary, encode it as Base64 for storage/transmission
+        encrypted_data = base64.b64encode(response["CiphertextBlob"]).decode("utf-8")
+        return encrypted_data
+
+    except Exception as e:
+        print(f"Error encrypting data: {e}")
+        raise

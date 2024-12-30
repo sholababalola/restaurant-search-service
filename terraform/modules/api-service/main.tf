@@ -55,6 +55,7 @@ resource "aws_lambda_function" "lambda_function" {
       API_KEY_SECRET_ID             = aws_secretsmanager_secret.api_key.id
       DATABASE_ENDPOINT             = var.db_endpoint
       DATABASE_NAME                 = var.db_name
+      SERVICE_KMS_KEY_ARN           = aws_kms_key.service.arn
     }
   }
 
