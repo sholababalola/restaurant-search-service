@@ -1,9 +1,9 @@
 name: Prod CI/CD Workflow
-# on:
-#   workflow_dispatch:
+on:
+  workflow_dispatch:
 jobs:
   prod-build-test-deploy:
     name: Prod Build Test and Deploy
-    uses: .github/workflows/reusable-ci.yml@main
+    uses: ./.github/workflows/reusable-ci.yml
     with:
       environment: "prod"

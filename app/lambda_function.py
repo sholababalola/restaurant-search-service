@@ -19,10 +19,11 @@ from query.common import (
     Style,
     RequestType,
     get_database_time,
+    encrypt_data,
 )
 
-client = boto3.client("secretsmanager")
-get_database_secret_response = client.get_secret_value(
+secrets_manager_client = boto3.client("secretsmanager")
+get_database_secret_response = secrets_manager_client.get_secret_value(
     SecretId=os.getenv("DATABASE_CREDENTIAL_SECRET_ID")
 )
 secret = json.loads(get_database_secret_response["SecretString"])
@@ -33,7 +34,10 @@ engine = create_engine(connection_string, echo=True)
 Base.metadata.create_all(engine)
 SESSION = Session(engine)
 
-get_api_key_secret_response = client.get_secret_value(
+kms_client = boto3.client('kms')
+service_kms_key_arn = os.getenv("SERVICE_KMS_KEY_ARN")
+
+get_api_key_secret_response = secrets_manager_client.get_secret_value(
     SecretId=os.getenv("API_KEY_SECRET_ID")
 )
 API_KEY = json.loads(get_api_key_secret_response["SecretString"])["apiKey"]
@@ -85,8 +89,8 @@ def lambda_handler(event, context):
         "body": event.get("body"),
     }
     request_history = RequestHistory(
-        request=request,
-        response=response,
+        request=encrypt_data(kms_client, service_kms_key_arn, json.dumps(request)),
+        response=encrypt_data(kms_client, service_kms_key_arn, json.dumps(response)),
         request_type=request_type,
         request_time=request_time,
     )
@@ -123,7 +127,7 @@ def handleRecommendation(event, context):
             "body": json.dumps({"message": "RequestTime is not properly formated"}),
         }
 
-    next_page = int(query_params.get("next_page", "1"))
+    next_page = int(query_params.get("nextPage", "1"))
     output = []
 
     restaurant: Restaurant
@@ -144,7 +148,7 @@ def handleRecommendation(event, context):
     LOGGER.info("Get recommendation completed successfully")
     return {
         "statusCode": 200,
-        "body": json.dumps({"restaurantRecommendation": output}),
+        "body": json.dumps({"restaurantRecommendation": output, "nextPage": next_page}),
     }
 
 
