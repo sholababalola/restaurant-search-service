@@ -8,15 +8,15 @@ on:
         type: string
 
 jobs:
-  terraform:
-    name: Deploy Terraform Code
+  build:
+    name: Deploy, Test and Deploy Code
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment}}
 
-    permissions:
-      id-token: write
-      contents: read
-      secrets: read
+    # permissions:
+    #   id-token: write
+    #   contents: read
+    #   secrets: read
 
     steps:
       - name: Checkout Repository
@@ -26,15 +26,6 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Configure AWS Credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          # AWS_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          echo "AWS credentials configured."
-          aws sts get-caller-identity
-
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
         with:
@@ -42,9 +33,10 @@ jobs:
 
       - name: Test Application code
         run: |
-          echo $AWS_REGION
           pip install -r app/requirements-dev.txt
           python -m unittest discover app/tests -p '*_test.py'
+        env:
+          PYTHONPATH: ./app:$PYTHONPATH
 
       - name: Package Application code
         run: |
@@ -58,26 +50,30 @@ jobs:
 
       - name: Init Terraform
         run: |
-          echo $AWS_REGION
           terraform init
           terraform workspace new ${{ inputs.environment}} || exit 0
           terraform workspace select ${{ inputs.environment}} || exit 0
-        # env:
-          # AWS_REGION: us-east-1
+        working-directory: ./terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
 
       - name: Terraform Plan
         run: terraform plan -var-file="dev.tfvars"
         if: github.event_name == 'pull_request'
+        working-directory: ./terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+
 
       - name: Terraform Apply
         if: github.event_name == 'push'
         run: terraform apply -var-file=${{ inputs.environment}}.tfvars -auto-approve
-
-      # 7. Access AWS Secrets (Optional)
-      - name: Retrieve AWS Secret
-        run: |
-          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id example-secret --query 'SecretString' --output text)
-          echo "DB Password: $SECRET_VALUE"
+        working-directory: ./terraform
         env:
-          AWS_REGION: us-east-1
-    
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
