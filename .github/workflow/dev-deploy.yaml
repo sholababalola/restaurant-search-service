@@ -1,0 +1,15 @@
+name: Dev CI/CD Workflow
+on:
+  pull_request:
+    branches: 
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+jobs:
+  dev-build-test-deploy:
+    name: Dev Build Test and Deploy
+    uses: ./reusable-ci.yml
+    with:
+      environment: "dev"
