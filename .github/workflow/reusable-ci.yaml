@@ -1,0 +1,83 @@
+name: Reusable CI Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+
+jobs:
+  terraform:
+    name: Deploy Terraform Code
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment}}
+
+    permissions:
+      id-token: write
+      contents: read
+      secrets: read
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Configure AWS Credentials
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          # AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          echo "AWS credentials configured."
+          aws sts get-caller-identity
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.10.2
+
+      - name: Test Application code
+        run: |
+          echo $AWS_REGION
+          pip install -r app/requirements-dev.txt
+          python -m unittest discover app/tests -p '*_test.py'
+
+      - name: Package Application code
+        run: |
+          mkdir build
+          pip install -r app/requirements.txt -t build/
+          pip install --platform manylinux2014_x86_64 --target=build \
+              --implementation cp --python-version 3.12 --only-binary=:all: --upgrade psycopg2-binary
+          cp -R app/query app/lambda_function.py build/
+          cd build
+          zip -r ../service-api.zip .
+
+      - name: Init Terraform
+        run: |
+          echo $AWS_REGION
+          terraform init
+          terraform workspace new ${{ inputs.environment}} || exit 0
+          terraform workspace select ${{ inputs.environment}} || exit 0
+        # env:
+          # AWS_REGION: us-east-1
+
+      - name: Terraform Plan
+        run: terraform plan -var-file="dev.tfvars"
+        if: github.event_name == 'pull_request'
+
+      - name: Terraform Apply
+        if: github.event_name == 'push'
+        run: terraform apply -var-file=${{ inputs.environment}}.tfvars -auto-approve
+
+      # 7. Access AWS Secrets (Optional)
+      - name: Retrieve AWS Secret
+        run: |
+          SECRET_VALUE=$(aws secretsmanager get-secret-value --secret-id example-secret --query 'SecretString' --output text)
+          echo "DB Password: $SECRET_VALUE"
+        env:
+          AWS_REGION: us-east-1
+    
