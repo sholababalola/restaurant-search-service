@@ -52,4 +52,20 @@ module "api" {
   depends_on = [module.postgres, module.api_gateway_account]
 }
 
+module "restaurant-elt" {
+  source                       = "./modules/s3-lambda-notificatiion"
+  service_name              = "${terraform.workspace}-restaurant-etl"
+  lambda_handler               = "etl.lambda_function.lambda_handler"
+  lambda_zip_file              = "../etl.zip"
+  vpc_id                       = module.vpc.vpc_id
+  subnet_ids                   = module.vpc.private_subnet_ids
+  db_credential_secret_arn     = module.postgres.db_credential_secret_arn
+  db_credential_secret_key_arn = module.postgres.kms_key_arn
+  db_security_group_id         = module.postgres.db_security_group_id
+  db_port                      = module.postgres.db_instance_port
+  db_endpoint                  = module.postgres.db_instance_endpoint
+  db_name                      = "restaurants"
+
+  depends_on = [module.postgres, module.api_gateway_account]
+}
 

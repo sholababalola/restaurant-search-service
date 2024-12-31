@@ -1,4 +1,5 @@
 #!/bin/bash
+rm -rf build service-api.zip etl.zip 
 mkdir build
 pip install -r app/requirements.txt -t build/ || exit 1
 pip install --platform manylinux2014_x86_64 --target=build \
@@ -6,4 +7,9 @@ pip install --platform manylinux2014_x86_64 --target=build \
 cp -R app/query app/lambda_function.py build/
 cd build
 zip -r ../service-api.zip .
+cd ..
+
+cp -R app/etl build/
+cd build
+zip -r ../etl.zip .
 cd ..
