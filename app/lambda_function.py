@@ -28,6 +28,7 @@ get_api_key_secret_response = SECRETS_MANAGER_CLIENT.get_secret_value(
     SecretId=os.getenv("API_KEY_SECRET_ID")
 )
 API_KEY = json.loads(get_api_key_secret_response["SecretString"])["apiKey"]
+QUERY_PAGE_SIZE = int(os.getenv("QUERY_PAGE_SIZE", "20"))
 
 
 def lambda_handler(event, context):
@@ -119,7 +120,7 @@ def handleRecommendation(event, context):
 
     restaurant: Restaurant
     for restaurant in paginated_query_restaurants(
-        SESSION, query_params.get("query"), request_time, next_page
+        SESSION, query_params.get("query"), request_time, next_page, QUERY_PAGE_SIZE
     ):
         output.append(
             dict(
@@ -133,6 +134,7 @@ def handleRecommendation(event, context):
             )
         )
     LOGGER.info("Get recommendation completed successfully")
+    next_page = next_page + 1 if len(output) == QUERY_PAGE_SIZE else None
     return {
         "statusCode": 200,
         "body": json.dumps({"restaurantRecommendation": output, "nextPage": next_page}),

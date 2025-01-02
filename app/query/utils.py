@@ -32,8 +32,8 @@ def record_to_create_restuarant(record: dict) -> Restaurant:
         address=record.get("address"),
         open_hour=open_hour,
         close_hour=close_hour,
-        vegetarian=record.get("vegetarian").lower() == "true",
-        delivers=record.get("delivers").lower() == "true",
+        vegetarian=str(record.get("vegetarian").lower()) == "true",
+        delivers=str(record.get("delivers").lower()) == "true",
     )
 
 

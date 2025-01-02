@@ -14,7 +14,7 @@ secret = json.loads(get_database_secret_response["SecretString"])
 database_endpoint = os.getenv("DATABASE_ENDPOINT")
 database_name = os.getenv("DATABASE_NAME")
 connection_string = f"postgresql+psycopg2://{secret['username']}:{secret['password']}@{database_endpoint}/{database_name}?sslmode=require"
-engine = create_engine(connection_string, echo=True)
+engine = create_engine(connection_string, echo=False)
 Base.metadata.create_all(engine)
 
 SESSION = Session(engine)

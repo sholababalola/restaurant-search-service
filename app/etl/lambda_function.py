@@ -16,6 +16,7 @@ from query.utils import (
 
 DATA_SEPARATOR = "|"
 S3_fILE_LIMIT = 1000000
+MAX_BATCH_WRITE = 100
 
 
 def lambda_handler(event, context):
@@ -53,12 +54,17 @@ def handleCreateRestaurant(bucket_name, object_key):
                 continue
             record = rows_to_object(headers, row)
             if not is_valid_create_restaurant(record):
+                LOGGER.warning(f"Invalid record encountered: {line}")
                 s3_writer.append(line.encode(encoding="utf-8"))
             restaurants.append(record_to_create_restuarant(record))
 
-            if count >= 100:
+            if (count - 1) % MAX_BATCH_WRITE == 0:
+                LOGGER.info(f"Creating {MAX_BATCH_WRITE} records, total records: {count - 1}")
                 batch_create_restaurants(SESSION, restaurants)
                 restaurants = []
+        if len(restaurants) > 0:
+            LOGGER.info(f"Creating {len(restaurants)} records, total records: {count - 1}")
+            batch_create_restaurants(SESSION, restaurants)
     finally:
         s3_writer.close()
 
@@ -76,8 +82,12 @@ def handleDeleteRestaurant(bucket_name, object_key):
                 continue
             record = rows_to_object(headers, row)
             if not is_valid_delete_restaurant(record):
+                LOGGER.warning(f"Invalid record encountered: {line}")
                 s3_writer.append(line.encode(encoding="utf-8"))
+            LOGGER.info(f"Deleting restaurant {record.get("name")}, total records: {count - 1}")
             delete_restaurant(SESSION, record_to_delete_restuarant(record))
+    except Exception as e:
+        LOGGER.error(e)
     finally:
         s3_writer.close()
 
@@ -95,7 +105,9 @@ def handleUpdateRestaurant(bucket_name, object_key):
                 continue
             record = rows_to_object(headers, row)
             if not is_valid_update_restaurant(record):
+                LOGGER.warning(f"Invalid record encountered: {line}")
                 s3_writer.append(line.encode(encoding="utf-8"))
+            LOGGER.info(f"Updating restaurant {record.get("name")}, total records: {count - 1}")
             update_restaurant(SESSION, record)
     finally:
         s3_writer.close()

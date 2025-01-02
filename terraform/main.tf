@@ -52,7 +52,7 @@ module "api" {
   depends_on = [module.postgres, module.api_gateway_account]
 }
 
-module "restaurant-elt" {
+module "restaurant-etl" {
   source                       = "./modules/s3-lambda-notificatiion"
   service_name              = "${terraform.workspace}-restaurant-etl"
   lambda_handler               = "etl.lambda_function.lambda_handler"

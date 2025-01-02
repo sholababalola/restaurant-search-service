@@ -1,5 +1,4 @@
-from sqlalchemy import and_
-from sqlalchemy.orm import declarative_base, Session, Query
+from sqlalchemy.orm import Session, Query
 from sqlalchemy.sql import ColumnExpressionArgument
 import itertools
 import os
@@ -25,7 +24,6 @@ KEY_WORD_TO_COLUMN_MAP = dict(
 )
 
 MAX_CREATE_BATCH_SIZE = int(os.getenv("MAX_CREATE_BATCH_SIZE", "50"))
-QUERY_PAGE_SIZE = int(os.getenv("QUERY_PAGE_SIZE", "20"))
 
 
 def filter_negation_is_present(key_word: str, sentence: str):
@@ -49,25 +47,36 @@ def get_boolean_filter(key_word: str, sentence: str) -> ColumnExpressionArgument
         return False
     elif filter_is_present(key_word, sentence):
         return True
-    return False
+    return None
 
 
 def get_style_filter(sentence: str) -> ColumnExpressionArgument:
     filters = []
+    filter_negations = []
     for style in Style._member_names_:
         # check negation first
         if filter_negation_is_present(style, sentence):
-            continue
+            filter_negations.append(style)
         elif filter_is_present(style, sentence):
             filters.append(style)
-    return filters
+    return (False, filters) if len(filters) > 0 else (True, filter_negations)
 
 
-def add_style_filter(query: Query, filters: list[str]) -> Query:
+def add_style_filter(query: Query, filters_tuple: tuple[bool, list[str]]) -> Query:
+    filters = filters_tuple[1]
+    is_negation = filters_tuple[0]
     if len(filters) > 1:
-        return query.filter(Restaurant.style.in_(filters))
+        return query.filter(
+            Restaurant.style.in_(filters)
+            if not is_negation
+            else Restaurant.style.not_in(filters)
+        )
     elif len(filters) == 1:
-        return query.filter(Restaurant.style == filters[0])
+        return query.filter(
+            Restaurant.style == filters[0]
+            if not is_negation
+            else Restaurant.style != filters[0]
+        )
     return query
 
 
@@ -96,14 +105,14 @@ def paginated_query_restaurants(
     sentence: str,
     request_time: pendulum.DateTime,
     page_number: int,
-    page_size=QUERY_PAGE_SIZE,
+    page_size,
 ):
     query = session.query(Restaurant).filter()
     query = add_style_filter(query, get_style_filter(sentence))
 
     for boolean_key_word in ["vegetarian", "deliver"]:
         filter = get_boolean_filter(boolean_key_word, sentence)
-        if filter:
+        if filter is not None:
             query = query.filter(KEY_WORD_TO_COLUMN_MAP[boolean_key_word].is_(filter))
 
     query = add_time_filter(query, sentence, request_time)
@@ -157,10 +166,10 @@ def update_restaurant(
                 record["closeHour"], record["timezone"]
             )
         if "vegetarian" in record:
-            db_restaurant.vegetarian = record["vegetarian"].lower() == "true"
+            db_restaurant.vegetarian = str(record["vegetarian"].lower()) == "true"
 
         if "delivers" in record:
-            db_restaurant.delivers = record["delivers"].lower() == "true"
+            db_restaurant.delivers = str(record["delivers"].lower()) == "true"
 
         session.commit()
 
