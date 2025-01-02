@@ -1,4 +1,3 @@
-import logging
 import json
 import pendulum
 from query.builder import (
@@ -8,42 +7,29 @@ from query.builder import (
     update_restaurant,
     create_request_history,
 )
-import boto3
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 from query.common import (
-    Base,
     Restaurant,
     RequestHistory,
-    Style,
     RequestType,
-    get_database_time,
     encrypt_data,
 )
-
-secrets_manager_client = boto3.client("secretsmanager")
-get_database_secret_response = secrets_manager_client.get_secret_value(
-    SecretId=os.getenv("DATABASE_CREDENTIAL_SECRET_ID")
+from query.clients import SESSION, SECRETS_MANAGER_CLIENT, KMS_CLIENT, LOGGER
+from query.utils import (
+    is_valid_create_restaurant,
+    is_valid_update_restaurant,
+    is_valid_delete_restaurant,
+    record_to_create_restuarant,
+    record_to_delete_restuarant,
 )
-secret = json.loads(get_database_secret_response["SecretString"])
-database_endpoint = os.getenv("DATABASE_ENDPOINT")
-database_name = os.getenv("DATABASE_NAME")
-connection_string = f"postgresql+psycopg2://{secret['username']}:{secret['password']}@{database_endpoint}/{database_name}?sslmode=require"
-engine = create_engine(connection_string, echo=True)
-Base.metadata.create_all(engine)
-SESSION = Session(engine)
 
-kms_client = boto3.client('kms')
 service_kms_key_arn = os.getenv("SERVICE_KMS_KEY_ARN")
-
-get_api_key_secret_response = secrets_manager_client.get_secret_value(
+get_api_key_secret_response = SECRETS_MANAGER_CLIENT.get_secret_value(
     SecretId=os.getenv("API_KEY_SECRET_ID")
 )
 API_KEY = json.loads(get_api_key_secret_response["SecretString"])["apiKey"]
+QUERY_PAGE_SIZE = int(os.getenv("QUERY_PAGE_SIZE", "20"))
 
-LOGGER = logging.getLogger()
-LOGGER.setLevel(logging.INFO)
 
 def lambda_handler(event, context):
     LOGGER.debug("Received event: {}".format(json.dumps(event)))
@@ -78,7 +64,9 @@ def lambda_handler(event, context):
         response = {
             "statusCode": 500,
             "body": json.dumps(
-                {"message": f"Something went wrong, requestId: {context.aws_request_id}"}
+                {
+                    "message": f"Something went wrong, requestId: {context.aws_request_id}"
+                }
             ),
         }
 
@@ -89,8 +77,8 @@ def lambda_handler(event, context):
         "body": event.get("body"),
     }
     request_history = RequestHistory(
-        request=encrypt_data(kms_client, service_kms_key_arn, json.dumps(request)),
-        response=encrypt_data(kms_client, service_kms_key_arn, json.dumps(response)),
+        request=encrypt_data(KMS_CLIENT, service_kms_key_arn, json.dumps(request)),
+        response=encrypt_data(KMS_CLIENT, service_kms_key_arn, json.dumps(response)),
         request_type=request_type,
         request_time=request_time,
     )
@@ -100,7 +88,7 @@ def lambda_handler(event, context):
 
 def authorize(event):
     header = event.get("headers", {})
-    if not header or header is None or header == 'null':
+    if not header or header is None or header == "null":
         LOGGER.info(header)
         return False
     return API_KEY == header.get("X-AUTH-API-KEY")
@@ -132,7 +120,7 @@ def handleRecommendation(event, context):
 
     restaurant: Restaurant
     for restaurant in paginated_query_restaurants(
-        SESSION, query_params.get("query"), request_time, next_page
+        SESSION, query_params.get("query"), request_time, next_page, QUERY_PAGE_SIZE
     ):
         output.append(
             dict(
@@ -146,6 +134,7 @@ def handleRecommendation(event, context):
             )
         )
     LOGGER.info("Get recommendation completed successfully")
+    next_page = next_page + 1 if len(output) == QUERY_PAGE_SIZE else None
     return {
         "statusCode": 200,
         "body": json.dumps({"restaurantRecommendation": output, "nextPage": next_page}),
@@ -159,48 +148,17 @@ def handleCreateRestaurant(event, context):
             "body": json.dumps({"message": "Not Authorized"}),
         }
 
-    body = json.loads(event.get("body")) or {}
+    body = json.loads(event.get("body", "{}"))
     restaurants = []
-    required_keys = [
-        "name",
-        "style",
-        "address",
-        "openHour",
-        "closeHour",
-        "vegetarian",
-        "delivers",
-        "timezone",
-    ]
-
     for record in body.get("records", []):
-        for key in required_keys:
-            if key not in record:
-                return {
-                    "statusCode": 400,
-                    "body": json.dumps({"message": f"Field {key} is required"}),
-                }
-        style = record["style"]
-        if style.lower() not in Style._member_names_:
+        if not is_valid_create_restaurant(record):
             return {
                 "statusCode": 400,
                 "body": json.dumps(
-                    {"message": f"style must be one of {str(Style._member_names_)}"}
+                    {"message": "Object is not valid", "object": record}
                 ),
             }
-        timezone = record.get("timezone")
-        open_hour = get_database_time(record.get("openHour"), timezone)
-        close_hour = get_database_time(record.get("closeHour"), timezone)
-        restaurants.append(
-            Restaurant(
-                name=record.get("name"),
-                style=record.get("style").lower(),
-                address=record.get("address"),
-                open_hour=open_hour,
-                close_hour=close_hour,
-                vegetarian=record.get("vegetarian").lower() == "true",
-                delivers=record.get("delivers").lower() == "true",
-            )
-        )
+        restaurants.append(record_to_create_restuarant(record))
     batch_create_restaurants(SESSION, restaurants)
     LOGGER.info("Batch create completed successfully")
     return {
@@ -218,21 +176,14 @@ def handleDeleteRestaurant(event, context):
             "body": json.dumps({"message": "Not Authorized"}),
         }
 
-    body = json.loads(event.get("body")) or {}
-
-    def validate_restaurant(record):
-        required_keys = ["name", "address"]
-        for key in required_keys:
-            if key not in record:
-                return {
-                    "statusCode": 400,
-                    "body": json.dumps({f"message": "Field {key} is required"}),
-                }
-
+    body = json.loads(event.get("body", "{}"))
     record = body.get("record", {})
-    validate_restaurant(record)
-    restaurant = Restaurant(name=record.get("name"), address=record.get("address"))
-    delete_restaurant(SESSION, restaurant)
+    if not is_valid_delete_restaurant(record):
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Object is not valid", "object": record}),
+        }
+    delete_restaurant(SESSION, record_to_delete_restuarant(record))
     LOGGER.info(f"Delete restaurant completed successfully {record.get("name")}")
     return {
         "statusCode": 200,
@@ -248,19 +199,15 @@ def handleUpdateRestaurant(event, context):
             "statusCode": 401,
             "body": json.dumps({"message": "Not Authorized"}),
         }
-    body = json.loads(event.get("body")) or {}
 
-    def validate_restaurant(record):
-        required_keys = ["name", "address"]
-        for key in required_keys:
-            if key not in record:
-                return {
-                    "statusCode": 400,
-                    "body": json.dumps({f"message": "Field {key} is required"}),
-                }
-
+    body = json.loads(event.get("body", "{}"))
     record = body.get("record", {})
-    validate_restaurant(record)
+    if not is_valid_update_restaurant(record):
+        return {
+            "statusCode": 400,
+            "body": json.dumps({"message": "Object is not valid", "object": record}),
+        }
+
     update_restaurant(SESSION, record)
     LOGGER.info(f"Update restaurant completed successfully {record.get("name")}")
     return {

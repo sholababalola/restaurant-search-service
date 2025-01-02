@@ -23,6 +23,12 @@ resource "aws_security_group" "rds" {
   }
 }
 
+resource "random_string" "postgres_final_snapshot_identifier" {
+  length = 16
+  special = false
+  keepers = {}
+}
+
 resource "aws_db_instance" "postgres" {
   identifier                      = var.name
   engine                          = "postgres"
@@ -41,7 +47,7 @@ resource "aws_db_instance" "postgres" {
   vpc_security_group_ids          = [aws_security_group.rds.id]
   db_subnet_group_name            = aws_db_subnet_group.rds.name
   skip_final_snapshot             = false
-  final_snapshot_identifier       = "${var.name}-${uuid()}"
+  final_snapshot_identifier       = "${var.name}-${random_string.postgres_final_snapshot_identifier.result}"
   performance_insights_enabled    = true
   performance_insights_kms_key_id = aws_kms_key.rds.arn
   max_allocated_storage           = 200

@@ -38,17 +38,17 @@ class TestBuilderModule(unittest.TestCase):
         self.assertEqual(filter, True)
 
         filter = get_boolean_filter("vegetarion", "Find a restaurant open at 8 AM")
-        self.assertEqual(filter, False)
+        self.assertEqual(filter, None)
 
     def test_get_style_filter(self):
         filter = get_style_filter("Find an Italian French restaurant open at 8 AM")
-        self.assertEqual(filter, ["italian", "french"])
+        self.assertEqual(filter, (False, ["italian", "french"]))
 
         filter = get_style_filter("Find an Italian not French restaurant open at 8 AM")
-        self.assertEqual(filter, ["italian"])
+        self.assertEqual(filter, (False, ["italian"]))
 
         filter = get_style_filter("Find an restaurant open at 8 AM")
-        self.assertEqual(filter, [])
+        self.assertEqual(filter, (True, []))
 
 
 if __name__ == "__main__":

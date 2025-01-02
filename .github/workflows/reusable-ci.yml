@@ -13,18 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment}}
 
-    # permissions:
-    #   id-token: write
-    #   contents: read
-    #   secrets: read
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@v2
@@ -48,6 +43,11 @@ jobs:
           cd build
           zip -r ../service-api.zip .
 
+          cd ..
+          cp -R app/etl build/
+          cd build
+          zip -r ../etl.zip .
+
       - name: Init Terraform
         run: |
           terraform init
@@ -60,14 +60,13 @@ jobs:
           AWS_REGION: ${{ vars.AWS_REGION }}
 
       - name: Terraform Plan
-        run: terraform plan -var-file="dev.tfvars"
+        run: terraform plan -var-file=${{ inputs.environment}}.tfvars
         if: github.event_name == 'pull_request'
         working-directory: ./terraform
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_REGION }}
-
 
       - name: Terraform Apply
         if: github.event_name == 'push'

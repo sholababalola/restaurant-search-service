@@ -119,6 +119,14 @@
     }
     ```
 
+### ETL Service
+Restaurants to be created, deleted or updated can be uploaded to an S3 bucket.
+The service assumes properties are | separated and each line represent a restaurant record.
+The first row is used as the header.
+Data can be upload to create/, update/ or delete/ paths.
+On upload, a lambda with network access to the database, reads the file and persist the records to the database.
+Unprocessed records are saved to unprocessed/create/, unprocessed/update/ and unprocessed/delete/ paths.
+
 ### Infrastructure
 * Ingress: AWS ApiGateway
 * Compute: AWS Lambda
